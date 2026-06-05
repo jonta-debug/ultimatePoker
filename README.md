@@ -14,7 +14,7 @@ Ultimate Poker is a small Java Swing desktop project that simulates a poker roun
 
 - `src/` - Java source files for game logic, hand evaluation, assets, and Swing UI
 - `bin/` - compiled class files
-- `Poker cards 1.3/` - image assets used by the interface
+- `assets/Poker cards 1.3/` - image assets used by the interface
 
 ## Run
 

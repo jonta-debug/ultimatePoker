@@ -24,7 +24,8 @@ public class PokerAssets {
     private static final int DISPLAY_CARD_WIDTH = 80;
     private static final int DISPLAY_CARD_HEIGHT = 108;
 
-    private static final String ASSET_DIR = "Poker cards 1.3";
+    private static final String PRIMARY_ASSET_DIR = "assets/Poker cards 1.3";
+    private static final String LEGACY_ASSET_DIR = "Poker cards 1.3";
     private static final String CARD_SHEET = "1.2 Poker cards.png";
     private static final String DECK_SHEET = "Deck of cards ( full cards ).png";
     private static final String CHIP_SHEET = "fiches addon (Poker Cards).png";
@@ -38,9 +39,10 @@ public class PokerAssets {
 
     public PokerAssets() {
         try {
-            this.cardSheet = ImageIO.read(new File(ASSET_DIR, CARD_SHEET));
-            this.deckSheet = ImageIO.read(new File(ASSET_DIR, DECK_SHEET));
-            this.chipSheet = ImageIO.read(new File(ASSET_DIR, CHIP_SHEET));
+            File assetDir = resolveAssetDir();
+            this.cardSheet = ImageIO.read(new File(assetDir, CARD_SHEET));
+            this.deckSheet = ImageIO.read(new File(assetDir, DECK_SHEET));
+            this.chipSheet = ImageIO.read(new File(assetDir, CHIP_SHEET));
         } catch (IOException exception) {
             throw new IllegalStateException("Could not load poker assets", exception);
         }
@@ -67,6 +69,21 @@ public class PokerAssets {
         rankColumns.put(Rank.JACK, 10);
         rankColumns.put(Rank.QUEEN, 11);
         rankColumns.put(Rank.KING, 12);
+    }
+
+    private File resolveAssetDir() {
+        File primaryDir = new File(PRIMARY_ASSET_DIR);
+        if (primaryDir.isDirectory()) {
+            return primaryDir;
+        }
+
+        File legacyDir = new File(LEGACY_ASSET_DIR);
+        if (legacyDir.isDirectory()) {
+            return legacyDir;
+        }
+
+        throw new IllegalStateException(
+            "Could not find asset directory. Expected '" + PRIMARY_ASSET_DIR + "' or '" + LEGACY_ASSET_DIR + "'.");
     }
 
     public ImageIcon getCardIcon(Card card) {

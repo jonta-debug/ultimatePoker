@@ -34,6 +34,7 @@ public class PokerAssets {
     private final BufferedImage deckSheet;
     private final BufferedImage chipSheet;
     private final Map<String, ImageIcon> scaledCache;
+    private final Map<String, BufferedImage> bufferedImageCache;
     private final Map<Suit, Integer> suitRows;
     private final Map<Rank, Integer> rankColumns;
 
@@ -48,6 +49,7 @@ public class PokerAssets {
         }
 
         this.scaledCache = new HashMap<>();
+        this.bufferedImageCache = new HashMap<>();
         this.suitRows = new EnumMap<>(Suit.class);
         this.rankColumns = new EnumMap<>(Rank.class);
 
@@ -88,12 +90,53 @@ public class PokerAssets {
 
     public ImageIcon getCardIcon(Card card) {
         return scaledIcon("card-" + card.getSuit() + "-" + card.getRank(),
-            sliceCard(card), DISPLAY_CARD_WIDTH, DISPLAY_CARD_HEIGHT);
+            getCardImage(card), DISPLAY_CARD_WIDTH, DISPLAY_CARD_HEIGHT);
     }
 
     public ImageIcon getCardBackIcon() {
-        return scaledIcon("card-back", sliceSheetCell(0, 4),
+        return scaledIcon("card-back", getCardBackImage(),
             DISPLAY_CARD_WIDTH, DISPLAY_CARD_HEIGHT);
+    }
+
+    public BufferedImage getCardImage(Card card) {
+        if (card == null || card.getSuit() == null || card.getRank() == null) {
+            return null;
+        }
+
+        String key = "source-card-" + card.getSuit() + "-" + card.getRank();
+        if (!bufferedImageCache.containsKey(key)) {
+            try {
+                bufferedImageCache.put(key, sliceCard(card));
+            } catch (RuntimeException exception) {
+                return null;
+            }
+        }
+        return bufferedImageCache.get(key);
+    }
+
+    public BufferedImage getCardBackImage() {
+        String key = "source-card-back";
+        if (!bufferedImageCache.containsKey(key)) {
+            try {
+                bufferedImageCache.put(key, sliceSheetCell(0, 4));
+            } catch (RuntimeException exception) {
+                return null;
+            }
+        }
+        return bufferedImageCache.get(key);
+    }
+
+    public BufferedImage getScaledCardImage(Card card, int width, int height) {
+        if (card == null) {
+            return null;
+        }
+        return scaledBufferedImage(
+            "card-" + card.getSuit() + "-" + card.getRank(),
+            getCardImage(card), width, height);
+    }
+
+    public BufferedImage getScaledCardBackImage(int width, int height) {
+        return scaledBufferedImage("card-back", getCardBackImage(), width, height);
     }
 
     public ImageIcon getDeckIcon() {
@@ -168,8 +211,32 @@ public class PokerAssets {
     private ImageIcon scaledIcon(String key, BufferedImage source, int width, int height) {
         String cacheKey = key + "-" + width + "x" + height;
         if (!scaledCache.containsKey(cacheKey)) {
-            scaledCache.put(cacheKey, new ImageIcon(source.getScaledInstance(width, height, Image.SCALE_SMOOTH)));
+            BufferedImage scaledImage = scaledBufferedImage(key, source, width, height);
+            if (scaledImage == null) {
+                return getPlaceholderIcon();
+            }
+            scaledCache.put(cacheKey, new ImageIcon(scaledImage));
         }
         return scaledCache.get(cacheKey);
+    }
+
+    private BufferedImage scaledBufferedImage(String key, BufferedImage source, int width, int height) {
+        if (source == null || width <= 0 || height <= 0) {
+            return null;
+        }
+
+        String cacheKey = "scaled-" + key + "-" + width + "x" + height;
+        if (!bufferedImageCache.containsKey(cacheKey)) {
+            BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = scaled.createGraphics();
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING,
+                RenderingHints.VALUE_RENDER_QUALITY);
+            graphics.drawImage(source, 0, 0, width, height, null);
+            graphics.dispose();
+            bufferedImageCache.put(cacheKey, scaled);
+        }
+        return bufferedImageCache.get(cacheKey);
     }
 }

@@ -10,6 +10,7 @@ import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.RenderingHints;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import javax.swing.BorderFactory;
@@ -57,7 +58,7 @@ public final class GameUI {
         private int visibleCommunityCards;
         private boolean revealHiddenPlayerCards;
         private boolean revealFinalCommunityCard;
-        private Player winner;
+        private List<Player> winners;
 
         private GameFrame() {
             this.game = new Game();
@@ -196,7 +197,7 @@ public final class GameUI {
             visibleCommunityCards = 0;
             revealHiddenPlayerCards = false;
             revealFinalCommunityCard = false;
-            winner = null;
+            winners = Collections.emptyList();
 
             rebuildPlayerPanels();
             refreshView();
@@ -276,7 +277,7 @@ public final class GameUI {
                 revealHiddenPlayerCards = true;
             } else if (!revealFinalCommunityCard) {
                 revealFinalCommunityCard = true;
-                winner = game.determineWinner();
+                winners = game.determineWinners();
             } else {
                 nextButton.setEnabled(false);
             }
@@ -302,14 +303,14 @@ public final class GameUI {
             }
 
             for (PlayerPanel panel : playerPanels) {
-                boolean isWinner = revealFinalCommunityCard && panel.player == winner;
+                boolean isWinner = revealFinalCommunityCard && winners.contains(panel.player);
                 HandResult result = revealFinalCommunityCard ? game.evaluatePlayer(panel.player) : null;
                 panel.refresh(revealHiddenPlayerCards || revealFinalCommunityCard, isWinner, result);
             }
 
             statusLabel.setText(buildStatusText());
-            nextButton.setEnabled(!revealFinalCommunityCard || winner == null);
-            if (revealFinalCommunityCard && winner != null) {
+            nextButton.setEnabled(!revealFinalCommunityCard || winners.isEmpty());
+            if (revealFinalCommunityCard && !winners.isEmpty()) {
                 nextButton.setEnabled(false);
             }
         }
@@ -325,8 +326,17 @@ public final class GameUI {
                 return "Alle Spieler haben jetzt beide Handkarten offen. Als Nächstes kommt die letzte Tischkarte.";
             }
 
-            HandResult winnerResult = game.evaluatePlayer(winner);
-            return "Gewinner: " + winner.getName() + " mit " + winnerResult;
+            Player firstWinner = winners.get(0);
+            HandResult winnerResult = game.evaluatePlayer(firstWinner);
+            StringBuilder names = new StringBuilder();
+            for (Player winner : winners) {
+                if (names.length() > 0) {
+                    names.append(", ");
+                }
+                names.append(winner.getName());
+            }
+            return (winners.size() == 1 ? "Gewinner: " : "Geteilter Sieg: ")
+                + names + " mit " + winnerResult;
         }
 
         private String formatAmount(double amount) {

@@ -1,10 +1,12 @@
-public class Card {
-    public Suit suit;
-    public Rank rank;
+import java.util.Objects;
+
+public final class Card {
+    private final Suit suit;
+    private final Rank rank;
 
     public Card(Suit suit, Rank rank){
-        this.suit = suit;
-        this.rank = rank;
+        this.suit = Objects.requireNonNull(suit, "suit");
+        this.rank = Objects.requireNonNull(rank, "rank");
     }
 
     @Override
@@ -18,6 +20,23 @@ public class Card {
 
     public Suit getSuit(){
         return suit;
+    }
+
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+        if (!(object instanceof Card)) {
+            return false;
+        }
+        Card other = (Card) object;
+        return suit == other.suit && rank == other.rank;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(suit, rank);
     }
     
 }

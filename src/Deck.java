@@ -1,13 +1,11 @@
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 
 public class Deck {
-    List<Card> deck = new ArrayList<>();
-
-    
-
-    
+    private final List<Card> deck = new ArrayList<>();
     
     public void createDeck(){
         deck.clear();
@@ -20,7 +18,11 @@ public class Deck {
     }
 
     public void shuffleDeck(){
-        Random random = new Random();
+        shuffleDeck(new Random());
+    }
+
+    void shuffleDeck(Random random){
+        Objects.requireNonNull(random, "random");
         for (int i = deck.size() - 1; i > 0; i--) {
             int j = random.nextInt(i + 1);
         
@@ -31,10 +33,12 @@ public class Deck {
     }
 
     public Card getFirstCard(){
+        ensureNotEmpty();
         return deck.get(0);
     }
 
     public Card drawCard(){
+        ensureNotEmpty();
         return deck.remove(0);
     }
 
@@ -42,5 +46,13 @@ public class Deck {
         return deck.size();
     }
 
-    
+    public List<Card> getCards() {
+        return Collections.unmodifiableList(new ArrayList<>(deck));
+    }
+
+    private void ensureNotEmpty() {
+        if (deck.isEmpty()) {
+            throw new IllegalStateException("Cannot draw from an empty deck");
+        }
+    }
 }

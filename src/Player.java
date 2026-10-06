@@ -1,15 +1,26 @@
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 public class Player {
-    private String name;
-    private int ID;
+    private final String name;
+    private final int ID;
     private double moneyAmount;
-    private List<Card> hand;
+    private final List<Card> hand;
     private double currentBet;
 
     public Player(String name, int ID, double moneyAmount){
-            this.name = name;
+            if (name == null || name.trim().isEmpty()) {
+                throw new IllegalArgumentException("Player name must not be blank");
+            }
+            if (ID <= 0) {
+                throw new IllegalArgumentException("Player ID must be positive");
+            }
+            if (!Double.isFinite(moneyAmount) || moneyAmount < 0) {
+                throw new IllegalArgumentException("Starting money must be finite and non-negative");
+            }
+            this.name = name.trim();
             this.ID = ID;
             this.moneyAmount = moneyAmount; 
             this.hand = new ArrayList<>();
@@ -17,26 +28,26 @@ public class Player {
     }
 
     public void receiveCard(Card card){
-        hand.add(card);
+        if (hand.size() >= 2) {
+            throw new IllegalStateException("A player cannot receive more than two hole cards");
+        }
+        hand.add(Objects.requireNonNull(card, "card"));
     }
 
     public void clearHand(){
         hand.clear();
     }
     public boolean validBet(double bet){
-        return bet <= moneyAmount;
+        return Double.isFinite(bet) && bet >= 0 && bet <= moneyAmount;
     }
 
     public void setBet(double bet){
-        if(validBet(bet)){
-            currentBet += bet;
-            moneyAmount -= bet;
+        if (!validBet(bet)) {
+            throw new IllegalArgumentException(
+                "Bet must be finite, non-negative, and no greater than the player's money");
         }
-        else{
-            System.out.println("|Bet: " + bet + "is not valid|");
-            System.out.println("|moneyAmonunt: " + moneyAmount + "|");
-        }
-        
+        currentBet += bet;
+        moneyAmount -= bet;
     }
 
     public double getMoneyAmount(){
@@ -44,7 +55,7 @@ public class Player {
     }
 
     public List<Card> getHand(){
-        return hand;
+        return Collections.unmodifiableList(hand);
     }
 
     public double getCurrentBet(){

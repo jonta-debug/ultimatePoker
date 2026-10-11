@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>dev.ultimatepoker</groupId><artifactId>ultimate-poker</artifactId><version>1.0-SNAPSHOT</version>
+  <properties><maven.compiler.release>17</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding><javalin.version>7.2.3</javalin.version></properties>
+  <dependencies><dependency><groupId>io.javalin</groupId><artifactId>javalin-bundle</artifactId><version>${javalin.version}</version></dependency></dependencies>
+  <build>
+    <sourceDirectory>src</sourceDirectory><testSourceDirectory>test</testSourceDirectory>
+    <resources><resource><directory>resources</directory></resource><resource><directory>src</directory><includes><include>cards/**</include></includes></resource></resources>
+    <plugins>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.14.1</version></plugin>
+      <plugin><groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.5.1</version></plugin>
+    </plugins>
+  </build>
+</project>

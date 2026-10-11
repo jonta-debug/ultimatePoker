@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ultimate Poker</title><link rel="stylesheet" href="/style.css"></head>
+<body><main>
+  <h1>Ultimate Poker</h1>
+  <p id="connection" class="status offline">Disconnected</p>
+  <section id="join-panel">
+    <label>Display name<input id="name" maxlength="30" autocomplete="nickname"></label>
+    <label>Join code<input id="code" maxlength="6" autocapitalize="characters"></label>
+    <button id="join">Join table</button><p id="error" role="alert"></p>
+  </section>
+  <section id="game-panel" hidden>
+    <div class="heading"><strong id="player-name"></strong><span id="stage">Waiting</span></div>
+    <h2>Your cards</h2><div id="hole-cards" class="cards"></div>
+    <h2>Community cards</h2><div id="community-cards" class="cards"></div>
+    <p id="pot"></p>
+  </section>
+</main><script src="/app.js"></script></body>
+</html>

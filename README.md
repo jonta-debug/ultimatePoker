@@ -25,6 +25,7 @@ mvn -q -Dexec.mainClass=GameSessionServiceTest -Dexec.classpathScope=test exec:j
 mvn -q -Dexec.mainClass=PokerTransportIntegrationTest -Dexec.classpathScope=test exec:java
 mvn -q -Dexec.mainClass=TexasHoldemGameTest -Dexec.classpathScope=test exec:java
 mvn -q -Dexec.mainClass=TexasHoldemTransportTest -Dexec.classpathScope=test exec:java
+mvn -q -Dexec.mainClass=PlayerReconnectTransportTest -Dexec.classpathScope=test exec:java
 node test/mobile-card-rendering.test.js
 ```
 

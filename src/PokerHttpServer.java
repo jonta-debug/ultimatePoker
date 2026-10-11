@@ -21,7 +21,27 @@ public final class PokerHttpServer implements AutoCloseable {
     private void configure(JavalinConfig config){
         config.staticFiles.add(f->{f.hostedPath="/";f.directory="/web";f.location=Location.CLASSPATH;});
         config.routes.post("/api/sessions",ctx->{JsonNode body=readOptionalBody(ctx);GameMode mode=optionalMode(body);HostedSession h=createSession(mode);respond(ctx,201,new TransportDtos.SessionDto(h.joinCode(),h.hostToken(),mode.name()));});
-        config.routes.post("/api/sessions/{code}/join",ctx->{JsonNode body=readBody(ctx);String sid=directory.requireSessionId(ctx.pathParam("code"));PlayerRegistration r=service.joinGame(new JoinGameRequest(sid,requiredText(body,"displayName")));String token=directory.issuePlayerToken(r);respond(ctx,201,new TransportDtos.JoinDto(token,r.getPlayerId(),r.getDisplayName(),directory.getJoinCode(sid),service.getGameMode(sid).name()));});
+        config.routes.post("/api/sessions/{code}/join",ctx->{
+            JsonNode body=readBody(ctx);
+            String sid=directory.requireSessionId(ctx.pathParam("code"));
+            String existingToken=bearer(ctx);
+            if(!existingToken.isEmpty()){
+                ClientIdentity identity=directory.requirePlayer(existingToken);
+                if(!sid.equals(identity.sessionId())){
+                    throw new TransportException(409,"TOKEN_SESSION_MISMATCH",
+                        "Saved player token belongs to another session");
+                }
+                respond(ctx,200,new TransportDtos.JoinDto(existingToken,identity.playerId(),
+                    identity.displayName(),directory.getJoinCode(sid),service.getGameMode(sid).name()));
+                return;
+            }
+            PlayerRegistration registration=service.joinGame(
+                new JoinGameRequest(sid,requiredText(body,"displayName")));
+            String token=directory.issuePlayerToken(registration);
+            respond(ctx,201,new TransportDtos.JoinDto(token,registration.getPlayerId(),
+                registration.getDisplayName(),directory.getJoinCode(sid),
+                service.getGameMode(sid).name()));
+        });
         config.routes.get("/api/session",ctx->{ClientIdentity i=requirePlayer(ctx);respond(ctx,200,new TransportDtos.IdentityDto(i.displayName(),directory.getJoinCode(i.sessionId()),playerState(i)));});
         config.routes.get("/api/state/public",ctx->{String sid=directory.requireSessionId(ctx.queryParam("code"));respond(ctx,200,publicState(sid));});
         config.routes.get("/api/state/player",ctx->respond(ctx,200,playerState(requirePlayer(ctx))));

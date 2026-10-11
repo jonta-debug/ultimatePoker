@@ -1,0 +1,1 @@
+#holdem-actions{display:grid;grid-template-columns:repeat(2,1fr);gap:.55rem}#holdem-actions input{grid-column:1/-1;width:100%;padding:.7rem;border-radius:8px}#holdem-actions button:disabled{opacity:.35;cursor:not-allowed}#turn-status{font-weight:700;color:#e6bd62}

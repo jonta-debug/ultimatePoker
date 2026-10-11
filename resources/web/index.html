@@ -1,19 +1,6 @@
-<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ultimate Poker</title><link rel="stylesheet" href="/style.css"></head>
-<body><main>
-  <h1>Ultimate Poker</h1>
-  <p id="connection" class="status offline">Disconnected</p>
-  <section id="join-panel">
-    <label>Display name<input id="name" maxlength="30" autocomplete="nickname"></label>
-    <label>Join code<input id="code" maxlength="6" autocapitalize="characters"></label>
-    <button id="join">Join table</button><p id="error" role="alert"></p>
-  </section>
-  <section id="game-panel" hidden>
-    <div class="heading"><strong id="player-name"></strong><span id="stage">Waiting</span></div>
-    <h2>Your cards</h2><div id="hole-cards" class="cards"></div>
-    <h2>Community cards</h2><div id="community-cards" class="cards"></div>
-    <p id="pot"></p>
-  </section>
-</main><script src="/app.js?v=2"></script></body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ultimate Poker</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/holdem.css"></head><body><main>
+<h1>Ultimate Poker</h1><p id="connection" class="status offline">Disconnected</p>
+<section id="join-panel"><label>Display name<input id="name" maxlength="30" autocomplete="nickname"></label><label>Join code<input id="code" maxlength="6" autocapitalize="characters"></label><button id="join">Join table</button><p id="error" role="alert"></p></section>
+<section id="game-panel" hidden><div class="heading"><strong id="player-name"></strong><span id="stage">Waiting</span></div><h2>Your cards</h2><div id="hole-cards" class="cards"></div><h2>Community cards</h2><div id="community-cards" class="cards"></div><p id="pot"></p>
+<div id="holdem-info" hidden><p id="turn-status"></p><p id="call-status"></p><div id="holdem-actions"><input id="action-amount" type="number" min="0" step="1" placeholder="Bet / raise to"><button data-action="CHECK">Check</button><button data-action="CALL">Call</button><button data-action="BET">Bet</button><button data-action="RAISE">Raise</button><button data-action="FOLD">Fold</button><button data-action="ALL_IN">All-in</button></div></div></section>
+</main><script src="/app.js?v=3"></script></body></html>

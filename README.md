@@ -1,8 +1,13 @@
 # Ultimate Poker
 
-Ultimate Poker is a Java 17+ poker engine with a Swing table frontend and a local-network phone prototype. The server is authoritative: browser clients receive filtered snapshots and never send or select player IDs.
+Ultimate Poker is a Java 17+ poker engine with two local playable modes:
 
-## Build
+- `ULTIMATE_POKER` — the original staged-reveal game.
+- `TEXAS_HOLDEM` — no-limit Hold'em with blinds, phone betting, all-ins, side pots, and payouts.
+
+Both modes use the same session service, privacy-filtered snapshots, HTTP/WebSocket transport, browser client, and local table composition root. Poker rules remain in their mode-specific engines.
+
+## Build and tests
 
 Install Maven 3.9+ and run:
 
@@ -10,9 +15,7 @@ Install Maven 3.9+ and run:
 mvn test-compile
 ```
 
-The local transport uses Javalin 7.2.3 (embedded Jetty, WebSockets, and static-file serving). The engine and legacy Swing code have no direct dependency on Javalin.
-
-Run the existing main-based regression suites:
+Run the main-based suites:
 
 ```bash
 mvn -q -Dexec.mainClass=PokerLogicTest -Dexec.classpathScope=test exec:java
@@ -20,69 +23,78 @@ mvn -q -Dexec.mainClass=GameEngineStateMachineTest -Dexec.classpathScope=test ex
 mvn -q -Dexec.mainClass=HandEvaluatorRegressionTest -Dexec.classpathScope=test exec:java
 mvn -q -Dexec.mainClass=GameSessionServiceTest -Dexec.classpathScope=test exec:java
 mvn -q -Dexec.mainClass=PokerTransportIntegrationTest -Dexec.classpathScope=test exec:java
+mvn -q -Dexec.mainClass=TexasHoldemGameTest -Dexec.classpathScope=test exec:java
+mvn -q -Dexec.mainClass=TexasHoldemTransportTest -Dexec.classpathScope=test exec:java
+node test/mobile-card-rendering.test.js
 ```
 
-## Local multiplayer prototype
+The transport uses Javalin 7.2.3 with embedded Jetty and WebSockets.
 
-The easiest end-to-end test keeps the server and table in one process, sharing exactly one `GameSessionService`:
+## Run Ultimate Poker
 
 ```bash
-mvn -q -Dexec.mainClass=PokerNetworkTableApp exec:java
+mvn -q -Dexec.mainClass=PokerNetworkTableApp -Dexec.args="8080 ULTIMATE_POKER" exec:java
 ```
 
-You may pass a port as the first argument; the default is 8080:
+## Run Texas Hold'em
 
 ```bash
-mvn -q -Dexec.mainClass=PokerNetworkTableApp -Dexec.args=8090 exec:java
+mvn -q -Dexec.mainClass=PokerNetworkTableApp -Dexec.args="8080 TEXAS_HOLDEM" exec:java
 ```
 
-Manual test on macOS:
+Then:
 
-1. Start `PokerNetworkTableApp`. Allow incoming Java connections if macOS asks.
-2. The terminal and lobby show a URL such as `http://192.168.1.42:8080` and a six-character join code.
-3. Connect the Mac and phone to the same Wi-Fi network. Disable VPN/client isolation if the phone cannot reach the Mac.
-4. Open the printed URL in the phone browser, enter a display name and join code, then join.
-5. Join from a second browser/device. The desktop Start Table button becomes available at two players.
-6. Start the table, then use its **Next** button. The phones update over WebSockets after every authoritative service transition.
-7. Verify each phone sees both of its own hole cards but only the currently public cards for other players.
+1. Connect the computer and phones to the same Wi-Fi.
+2. Open the printed local URL on 2–9 phones or browser tabs.
+3. Join with the displayed six-character code.
+4. Click **Start table** after at least two players have joined.
+5. In Hold'em, the acting phone receives legal action buttons. Bet and Raise amounts mean the player's target total contribution for the current street.
+6. The central display remains public-only. Each phone receives only its own hidden cards.
+7. At showdown, non-folded hands are revealed and chips are paid automatically. Use **Next Hand** on the table to rotate the dealer and continue.
 
-The server binds to `0.0.0.0`, while the printed URL is discovered from an active private IPv4 interface. Firewall rules and Wi-Fi access-point isolation can still prevent device-to-device access.
+The first Hold'em configuration uses 100-chip stacks and 1/2 blinds. The values are passed through `StartHoldemRoundCommand` and are not hardcoded in the engine.
 
-For a headless server (for example, a Raspberry Pi), run:
+## Hold'em rules implemented
 
-```bash
-mvn -q -Dexec.mainClass=PokerServerApp exec:java
-```
-
-It creates a session and prints its join code plus a private table token. The prototype host endpoints can then be driven by a trusted table client. Do not share the table token with players.
+- Correct heads-up and 3+ dealer/blind/action order.
+- Check, call, bet, raise, fold, and all-in with server-side validation.
+- Minimum full-raise tracking; a short all-in does not reopen action.
+- Automatic flop, turn, river, and showdown transitions.
+- Immediate award when all but one player folds.
+- Layered main/side pots from total committed chips.
+- Folded chips remain dead money but folded players are never eligible to win.
+- Tied pots split evenly. Odd chips go to eligible winners clockwise starting left of the dealer.
+- No burn cards in this prototype.
+- Busted seats are skipped for dealing, blinds, dealer rotation, and action.
 
 ## HTTP API
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/sessions` | Create a session; returns join code and host token |
-| `POST` | `/api/sessions/{code}/join` | Join with `{ "displayName": "..." }`; returns a player token |
-| `GET` | `/api/session` | Restore identity and private state using `Authorization: Bearer <player-token>` |
-| `GET` | `/api/state/public?code=ABC123` | Read the public filtered snapshot |
-| `GET` | `/api/state/player` | Read only the token owner's filtered snapshot |
-| `POST` | `/api/table/start` | Start a round using the host token and money/bet JSON |
-| `POST` | `/api/table/advance` | Advance one authoritative transition using the host token |
-| `POST` | `/api/table/next-round` | Start the next round after showdown using the host token |
+| `POST` | `/api/sessions` | Create a session; optional `{ "gameMode": "TEXAS_HOLDEM" }` |
+| `POST` | `/api/sessions/{code}/join` | Join and receive an opaque player token |
+| `GET` | `/api/session` | Restore token identity and latest private state |
+| `GET` | `/api/state/public?code=ABC123` | Public mode-specific snapshot |
+| `GET` | `/api/state/player` | Token owner's private snapshot |
+| `POST` | `/api/table/start` | Host starts the configured mode |
+| `POST` | `/api/table/advance` | Host advances Ultimate Poker only |
+| `POST` | `/api/table/next-round` | Host starts the next completed hand |
+| `POST` | `/api/holdem/action` | Token-bound `{ "action": "RAISE", "amount": 20 }` |
 
-WebSockets:
+WebSockets remain:
 
-- `/ws/player?token=...` pushes one player-specific snapshot. A newer connection replaces the token's previous active connection.
-- `/ws/public?code=...` pushes public snapshots only.
+- `/ws/player?token=...` for separately generated private snapshots.
+- `/ws/public?code=...` for public snapshots only.
 
-Player tokens are random 256-bit values stored in browser `localStorage` for reconnection. The private endpoint has no target-player parameter: the server resolves session ID and player ID from the token. Join codes are discoverable lobby identifiers, not authentication secrets. All state is in memory and disappears when the process exits.
+The server binds to `0.0.0.0`. macOS firewall permission may be required. Tokens and sessions are in memory and intended only for the trusted-LAN prototype.
 
 ## Existing desktop applications
 
-The previous applications remain available:
+The legacy frontend and standalone Ultimate Poker preview remain available:
 
 ```bash
 mvn -q -Dexec.mainClass=App exec:java
 mvn -q -Dexec.mainClass=PokerTablePreview exec:java
 ```
 
-`App` still launches the legacy `GameUI`; `PokerTablePreview` still runs its standalone simulated table. Neither was replaced by the network prototype.
+`App` still launches the original `GameUI`; it was not replaced by the multi-game network launcher.

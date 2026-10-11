@@ -6,118 +6,113 @@ import java.util.List;
 
 import javax.swing.JPanel;
 
-/** Owns round flow for the custom-painted poker table frontend. */
+/** Bridges service commands/snapshots to the custom-painted table. */
 public final class PokerTableController {
     private final PokerTablePanel tablePanel;
     private final AnimationManager animationManager;
+    private final GameSessionService gameService;
     private final List<String> playerNames;
     private final double startingMoney;
     private final double entryBet;
     private final Runnable backAction;
 
-    private Game game;
-    private RevealStage stage;
+    private String sessionId;
+    private GameSnapshot currentSnapshot;
     private boolean animationsRunning;
 
     public PokerTableController(List<String> playerNames, double startingMoney,
                                 double entryBet, Runnable backAction) {
-        if (playerNames == null) {
-            throw new IllegalArgumentException("Player names must not be null");
-        }
+        this(new GameSessionService(), playerNames, startingMoney, entryBet, backAction);
+    }
 
+    PokerTableController(GameSessionService gameService, List<String> playerNames,
+                         double startingMoney, double entryBet, Runnable backAction) {
+        if (gameService == null || playerNames == null) {
+            throw new IllegalArgumentException("Service and player names must not be null");
+        }
+        this.gameService = gameService;
         this.playerNames = Collections.unmodifiableList(new ArrayList<>(playerNames));
         this.startingMoney = startingMoney;
         this.entryBet = entryBet;
         this.backAction = backAction == null ? () -> { } : backAction;
-        this.tablePanel = new PokerTablePanel(this.playerNames.size());
-        this.animationManager = new AnimationManager(tablePanel::repaint);
-
+        tablePanel = new PokerTablePanel(this.playerNames.size());
+        animationManager = new AnimationManager(tablePanel::repaint);
         tablePanel.setAnimationManager(animationManager);
         tablePanel.setNextAction(this::advanceStage);
         tablePanel.setNewRoundAction(this::startNewRound);
         tablePanel.setBackAction(this::handleBack);
     }
 
-    public JPanel getView() {
-        return tablePanel;
-    }
+    public JPanel getView() { return tablePanel; }
 
     public void startNewRound() {
         animationManager.clear();
         animationsRunning = false;
-        game = new Game();
-        game.setupRound(playerNames, startingMoney, entryBet);
-        stage = RevealStage.PREFLOP_ONE_CARD_VISIBLE;
-        TableViewState state = refreshView();
+        sessionId = gameService.createSession();
+        for (String playerName : playerNames) {
+            gameService.joinGame(new JoinGameRequest(sessionId, playerName));
+        }
+        currentSnapshot = gameService.startRound(
+            new StartRoundCommand(sessionId, startingMoney, entryBet));
+        TableViewState state = refreshView(currentSnapshot);
         playAnimations(createInitialPlayerDealAnimations(state), this::finishAnimationBatch);
     }
 
     public void advanceStage() {
-        if (animationsRunning || stage == null || stage.isTerminal()) {
-            return;
-        }
+        if (animationsRunning || currentSnapshot == null
+                || currentSnapshot.getStage().isShowdown()) return;
 
-        switch (stage) {
-            case PREFLOP_ONE_CARD_VISIBLE:
-                dealThenRevealCommunity(
-                    RevealStage.FLOP_DEAL_FACE_DOWN,
-                    RevealStage.FLOP_REVEAL,
-                    0,
-                    3);
+        switch (currentSnapshot.getStage()) {
+            case PREFLOP:
+                dealThenRevealCommunity(GameStage.PREFLOP, GameStage.FLOP_DEALT, 0, 3);
                 break;
-            case FLOP_REVEAL:
-                dealThenRevealCommunity(
-                    RevealStage.TURN_DEAL_FACE_DOWN,
-                    RevealStage.TURN_REVEAL,
-                    3,
-                    4);
+            case FLOP:
+                dealThenRevealCommunity(GameStage.FLOP, GameStage.TURN_DEALT, 3, 4);
                 break;
-            case TURN_REVEAL:
-                transitionWithAnimations(
-                    RevealStage.RIVER_DEAL_FACE_DOWN,
-                    createCommunityBackDealAnimations(4, 5),
+            case TURN:
+                advanceService(GameStage.TURN);
+                refreshView(currentSnapshot);
+                playAnimations(createCommunityBackDealAnimations(4, 5),
                     this::finishAnimationBatch);
                 break;
-            case RIVER_DEAL_FACE_DOWN:
-                transitionWithAnimations(
-                    RevealStage.PLAYER_SECOND_CARD_REVEAL,
-                    createPlayerSecondCardFlipAnimations(),
+            case RIVER_DEALT:
+                advanceService(GameStage.RIVER_DEALT);
+                TableViewState playerReveal = refreshView(currentSnapshot);
+                playAnimations(createPlayerSecondCardFlipAnimations(playerReveal),
                     this::finishAnimationBatch);
                 break;
-            case PLAYER_SECOND_CARD_REVEAL:
-                transitionWithAnimations(
-                    RevealStage.RIVER_REVEAL,
-                    createCommunityFlipAnimations(4, 5),
+            case PLAYER_CARDS_REVEALED:
+                advanceService(GameStage.PLAYER_CARDS_REVEALED);
+                TableViewState river = refreshView(currentSnapshot);
+                playAnimations(createCommunityFlipAnimations(river, 4, 5),
                     this::finishAnimationBatch);
                 break;
-            case RIVER_REVEAL:
-                stage = RevealStage.SHOWDOWN;
-                TableViewState state = refreshView();
-                playAnimations(createWinnerAnimations(state), this::finishAnimationBatch);
+            case RIVER:
+                advanceService(GameStage.RIVER);
+                TableViewState showdown = refreshView(currentSnapshot);
+                playAnimations(createWinnerAnimations(showdown), this::finishAnimationBatch);
                 break;
             default:
-                break;
+                throw new IllegalStateException(
+                    "Controller cannot advance transient stage " + currentSnapshot.getStage());
         }
     }
 
-    private void dealThenRevealCommunity(RevealStage dealStage, RevealStage revealStage,
+    private void dealThenRevealCommunity(GameStage dealFrom, GameStage revealFrom,
                                          int firstCardIndex, int cardCount) {
-        stage = dealStage;
-        refreshView();
+        advanceService(dealFrom);
+        refreshView(currentSnapshot);
         playAnimations(createCommunityBackDealAnimations(firstCardIndex, cardCount), () -> {
-            stage = revealStage;
-            refreshView();
-            playAnimations(createCommunityFlipAnimations(firstCardIndex, cardCount),
-                this::finishAnimationBatch);
+            advanceService(revealFrom);
+            TableViewState revealed = refreshView(currentSnapshot);
+            playAnimations(createCommunityFlipAnimations(
+                revealed, firstCardIndex, cardCount), this::finishAnimationBatch);
         });
     }
 
-    private void transitionWithAnimations(RevealStage nextStage,
-                                          List<TableAnimation> animations,
-                                          Runnable onFinished) {
-        stage = nextStage;
-        refreshView();
-        playAnimations(animations, onFinished);
+    private void advanceService(GameStage expectedStage) {
+        currentSnapshot = gameService.advanceGame(
+            new AdvanceGameCommand(sessionId, expectedStage));
     }
 
     private void handleBack() {
@@ -126,137 +121,83 @@ public final class PokerTableController {
         backAction.run();
     }
 
-    private TableViewState refreshView() {
-        TableViewState state = TableViewState.fromGame(
-            game,
-            stage.getVisiblePlayerCardCount(),
-            stage.getDealtCommunityCardCount(),
-            stage.getRevealedCommunityCardCount(),
-            stage.shouldShowWinner(),
-            stage.shouldShowFinalHandStatus(),
-            stage.getStatusText());
+    private TableViewState refreshView(GameSnapshot snapshot) {
+        TableViewState state = TableViewState.fromSnapshot(snapshot);
         tablePanel.setViewState(state);
-        tablePanel.setNextEnabled(!stage.isTerminal());
+        tablePanel.setNextEnabled(!snapshot.getStage().isShowdown());
         return state;
     }
 
     private List<TableAnimation> createInitialPlayerDealAnimations(TableViewState state) {
         List<TableAnimation> animations = new ArrayList<>();
         Rectangle deckBounds = tablePanel.getDeckCardBounds();
-        int dealOrder = 0;
-
+        int order = 0;
         for (int cardIndex = 0; cardIndex < 2; cardIndex++) {
             for (int playerIndex = 0; playerIndex < state.getPlayers().size(); playerIndex++) {
-                Rectangle targetBounds = tablePanel.getPlayerCardBounds(playerIndex, cardIndex);
-                BufferedImage image = cardIndex == 0
+                Rectangle target = tablePanel.getPlayerCardBounds(playerIndex, cardIndex);
+                PlayerView player = state.getPlayers().get(playerIndex);
+                BufferedImage image = cardIndex < player.getVisibleCards().size()
                     ? tablePanel.getCardImageForAnimation(
-                        game.getPlayers().get(playerIndex).getHand().get(cardIndex),
-                        targetBounds.width,
-                        targetBounds.height)
-                    : tablePanel.getCardBackImageForAnimation(
-                        targetBounds.width,
-                        targetBounds.height);
-                if (image == null) {
-                    continue;
-                }
-
+                        player.getVisibleCards().get(cardIndex), target.width, target.height)
+                    : tablePanel.getCardBackImageForAnimation(target.width, target.height);
+                if (image == null) continue;
                 animations.add(new CardAnimation(
-                    image,
-                    deckBounds,
-                    targetBounds,
-                    0.72,
-                    1.0,
-                    dealOrder % 2 == 0 ? -0.12 : 0.12,
-                    0.0,
-                    0.88f,
-                    1.0f,
-                    500,
-                    dealOrder * 55L,
+                    image, deckBounds, target, 0.72, 1.0,
+                    order % 2 == 0 ? -0.12 : 0.12, 0.0,
+                    0.88f, 1.0f, 500, order * 55L,
                     AnimationSlot.playerCard(playerIndex, cardIndex)));
-                dealOrder++;
+                order++;
             }
         }
         return animations;
     }
 
-    private List<TableAnimation> createCommunityBackDealAnimations(
-            int firstCardIndex, int cardCount) {
+    private List<TableAnimation> createCommunityBackDealAnimations(int first, int end) {
         List<TableAnimation> animations = new ArrayList<>();
         Rectangle deckBounds = tablePanel.getDeckCardBounds();
-
-        for (int cardIndex = firstCardIndex; cardIndex < cardCount; cardIndex++) {
-            Rectangle targetBounds = tablePanel.getCommunityCardBounds(cardIndex);
-            BufferedImage backImage = tablePanel.getCardBackImageForAnimation(
-                targetBounds.width, targetBounds.height);
-            if (backImage == null) {
-                continue;
-            }
-
+        for (int index = first; index < end; index++) {
+            Rectangle target = tablePanel.getCommunityCardBounds(index);
+            BufferedImage image = tablePanel.getCardBackImageForAnimation(
+                target.width, target.height);
+            if (image == null) continue;
             animations.add(new CardAnimation(
-                backImage,
-                deckBounds,
-                targetBounds,
-                0.76,
-                1.0,
-                cardIndex % 2 == 0 ? -0.10 : 0.10,
-                0.0,
-                0.90f,
-                1.0f,
-                620,
-                (cardIndex - firstCardIndex) * 140L,
-                AnimationSlot.communityCard(cardIndex)));
+                image, deckBounds, target, 0.76, 1.0,
+                index % 2 == 0 ? -0.10 : 0.10, 0.0,
+                0.90f, 1.0f, 620, (index - first) * 140L,
+                AnimationSlot.communityCard(index)));
         }
         return animations;
     }
 
     private List<TableAnimation> createCommunityFlipAnimations(
-            int firstCardIndex, int cardCount) {
+            TableViewState state, int first, int end) {
         List<TableAnimation> animations = new ArrayList<>();
-
-        for (int cardIndex = firstCardIndex; cardIndex < cardCount; cardIndex++) {
-            Rectangle targetBounds = tablePanel.getCommunityCardBounds(cardIndex);
-            BufferedImage backImage = tablePanel.getCardBackImageForAnimation(
-                targetBounds.width, targetBounds.height);
-            BufferedImage faceImage = tablePanel.getCardImageForAnimation(
-                game.getCommunityCards().get(cardIndex),
-                targetBounds.width,
-                targetBounds.height);
-            if (backImage == null || faceImage == null) {
-                continue;
-            }
-
+        for (int index = first; index < end; index++) {
+            Rectangle target = tablePanel.getCommunityCardBounds(index);
+            BufferedImage back = tablePanel.getCardBackImageForAnimation(
+                target.width, target.height);
+            BufferedImage face = tablePanel.getCardImageForAnimation(
+                state.getCommunityCards().get(index), target.width, target.height);
+            if (back == null || face == null) continue;
             animations.add(new FlipCardAnimation(
-                backImage,
-                faceImage,
-                targetBounds,
-                320,
-                (cardIndex - firstCardIndex) * 140L,
-                AnimationSlot.communityCard(cardIndex)));
+                back, face, target, 320, (index - first) * 140L,
+                AnimationSlot.communityCard(index)));
         }
         return animations;
     }
 
-    private List<TableAnimation> createPlayerSecondCardFlipAnimations() {
+    private List<TableAnimation> createPlayerSecondCardFlipAnimations(TableViewState state) {
         List<TableAnimation> animations = new ArrayList<>();
-
-        for (int playerIndex = 0; playerIndex < game.getPlayers().size(); playerIndex++) {
-            Rectangle targetBounds = tablePanel.getPlayerCardBounds(playerIndex, 1);
-            BufferedImage backImage = tablePanel.getCardBackImageForAnimation(
-                targetBounds.width, targetBounds.height);
-            BufferedImage faceImage = tablePanel.getCardImageForAnimation(
-                game.getPlayers().get(playerIndex).getHand().get(1),
-                targetBounds.width,
-                targetBounds.height);
-            if (backImage == null || faceImage == null) {
-                continue;
-            }
-
+        for (int playerIndex = 0; playerIndex < state.getPlayers().size(); playerIndex++) {
+            Rectangle target = tablePanel.getPlayerCardBounds(playerIndex, 1);
+            BufferedImage back = tablePanel.getCardBackImageForAnimation(
+                target.width, target.height);
+            BufferedImage face = tablePanel.getCardImageForAnimation(
+                state.getPlayers().get(playerIndex).getVisibleCards().get(1),
+                target.width, target.height);
+            if (back == null || face == null) continue;
             animations.add(new FlipCardAnimation(
-                backImage,
-                faceImage,
-                targetBounds,
-                320,
-                playerIndex * 100L,
+                back, face, target, 320, playerIndex * 100L,
                 AnimationSlot.playerCard(playerIndex, 1)));
         }
         return animations;
@@ -264,11 +205,10 @@ public final class PokerTableController {
 
     private List<TableAnimation> createWinnerAnimations(TableViewState state) {
         List<TableAnimation> animations = new ArrayList<>();
-        for (int playerIndex = 0; playerIndex < state.getPlayers().size(); playerIndex++) {
-            if (state.getWinnerPlayerIds().contains(
-                    state.getPlayers().get(playerIndex).getId())) {
+        for (int index = 0; index < state.getPlayers().size(); index++) {
+            if (state.getWinnerPlayerIds().contains(state.getPlayers().get(index).getId())) {
                 animations.add(new WinnerHighlightAnimation(
-                    tablePanel.getPlayerBadgeBounds(playerIndex), 1_700));
+                    tablePanel.getPlayerBadgeBounds(index), 1_700));
             }
         }
         return animations;
@@ -279,13 +219,12 @@ public final class PokerTableController {
         tablePanel.setNextEnabled(false);
         animationManager.play(animations, () -> {
             animationsRunning = false;
-            if (onFinished != null) {
-                onFinished.run();
-            }
+            if (onFinished != null) onFinished.run();
         });
     }
 
     private void finishAnimationBatch() {
-        tablePanel.setNextEnabled(!stage.isTerminal());
+        tablePanel.setNextEnabled(currentSnapshot != null
+            && !currentSnapshot.getStage().isShowdown());
     }
 }
